@@ -1,6 +1,9 @@
+aiofile==3.8.8
+aiofiles==23.2.1
 anyio==3.7.1
 APScheduler==3.10.3
 asgiref==3.7.2
+caio==0.9.13
 certifi==2023.7.22
 cffi==1.15.1
 cryptography==41.0.3
