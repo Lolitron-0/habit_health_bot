@@ -57,7 +57,7 @@ async def send_notifications():
                     [[InlineKeyboardButton(text="Приступить", callback_data=f"key={key}")]])
                 message = await bot.sendMessage(chat_id=user.external_id, text=reply_text,
                                                 reply_markup=reply_markup)
-                await callback_delete_notification(message, 3 * 60 * 60)
+                await callback_delete_notification(message, 24 * 60 * 60)
 
         except Exception as e:
             logging.warning(f"Error while sending notifications to {user}")
