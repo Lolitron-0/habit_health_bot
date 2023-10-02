@@ -1,15 +1,11 @@
 import functools
-import json
-from uuid import uuid4
 
 import django.db.models
 import telegram
-from aiofile import async_open
 
 from django.core.management.base import BaseCommand
 from datetime import datetime
 from dotenv import load_dotenv
-from django.db.models import Case, When, Value
 
 from .utils import *
 from ...models import *
@@ -36,7 +32,6 @@ from telegram.ext import (
     filters,
 )
 
-from telegram.constants import ParseMode
 
 from telegram.error import BadRequest
 
@@ -954,14 +949,12 @@ async def callback_timer(context: ContextTypes.DEFAULT_TYPE):
             current_message = await bot.edit_message_text(chat_id=context.job.chat_id, message_id=current_message.id,
                                                           text=current_message.text)
             keyboard: list = list(current_message.reply_markup.inline_keyboard)
-            print(1, len(current_message.reply_markup.inline_keyboard), current_message.id)
             reply_markup = InlineKeyboardMarkup(
                 [[InlineKeyboardButton(text=f"({post.lead_time // 2 - i} сек) Выполнил(а) ✅",
                                        callback_data="com_zag")]] + keyboard[1:])
             current_message = await bot.edit_message_reply_markup(message_id=current_message.id,
                                                                   reply_markup=reply_markup,
                                                                   chat_id=context.job.chat_id)
-            print(2, len(current_message.reply_markup.inline_keyboard), current_message.id)
             await asyncio.sleep(1)
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(text=f"Выполнил(а) ✅",
                                                                    callback_data={await write_state(completed)})]] + keyboard[
@@ -1025,7 +1018,6 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         skip_button["hq"].pop(index)
         skip_button["c"] = False
         skip_button["e"] = False
-        print(data, skip_button)
 
         data["i"] += 1
         data["n"] = True
@@ -1524,10 +1516,14 @@ def run_bot():
     application.add_handler(MessageHandler(filters.VIDEO, get_video_id))
     application.add_handler(MessageHandler(filters.PHOTO, get_photo_id))
 
+
+    # scheduler
+    from .scheduler import CustomScheduler
+    CustomScheduler.initialize(application)
+    application.job_queue.run_repeating(callback=CustomScheduler._every_minute, interval=60)
+
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-    # django management
 
 
 class Command(BaseCommand):
