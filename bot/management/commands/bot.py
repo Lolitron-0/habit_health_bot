@@ -121,13 +121,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.info(f"Start new user {user}, inviter: {inviter}")
     except:
         if created:
-            logging.info(f"Start new user {user}")
+            logging.warning(f"Start new user {user}")
     reply_markup = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton(text="Подписаться на канал", url="https://t.me/BodnarVitaliy")],
             [InlineKeyboardButton(text="Поделиться c близкими",
                                   url=f"https://telegram.me/share/url?url={await user.get_referal_link(bot)}&text=Подпишись по моей реферальной ссылке чтобы получить день пробного периода!")],
-            [InlineKeyboardButton(text="Проверить условия", callback_data="check_requirements")]
+            [InlineKeyboardButton(text="Проверить условия", callback_data="check_requirements")],
+            [InlineKeyboardButton(text="Зарегистрироваться", callback_data=SIGN_UP)]
         ]
     )
     await update.message.reply_text(f'{text["start"]}', reply_markup=reply_markup, parse_mode="HTML")
@@ -205,7 +206,7 @@ def sign_up_required(func):
                 return
             return await func(update, context, *args, **kwargs)
         except Exception as e:
-            logging.info(e)
+            logging.warning(e)
             await bot.sendMessage(chat_id=update.effective_user.id, text="Сначала нажмите /start")
 
     return decorator
@@ -213,6 +214,8 @@ def sign_up_required(func):
 
 @requirements_required
 async def sign_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.callback_query:
+        await update.callback_query.answer()
     chat = update.effective_user
     reply_keyboard = [["Мужской", "Женский", "Пропустить"]]
     await bot.sendMessage(chat_id=chat.id, text=text["input sex"], reply_markup=ReplyKeyboardMarkup(
@@ -259,11 +262,11 @@ async def get_utc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         delta = abs_min - server_m
         context.user_data["utc"] = delta
         await update_or_create_user(chat, context)
-        await update.message.reply_text(text["reg ended"])
+        await update.message.reply_text(text["reg ended"], reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text(text=MENU_TEXT, reply_markup=await get_main_menu())
         return ConversationHandler.END
     except Exception as e:
-        logging.info(e)
+        logging.warning(e)
         await update.message.reply_text("Что то пошло не так! " + text["input utc"], reply_markup=SKIP_BUTTON_MARKUP)
         return UTC
 
@@ -1017,6 +1020,13 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         extended["n"] = False
         extended["e"] = True
 
+        skip_button = data.copy()
+        skip_button["hq"].append(skip_button["hq"][index])
+        skip_button["hq"].pop(index)
+        skip_button["c"] = False
+        skip_button["e"] = False
+        print(data, skip_button)
+
         data["i"] += 1
         data["n"] = True
         data["e"] = False
@@ -1038,7 +1048,7 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if index < len(data.items()) - 2:
             keyboard.append(
-                [InlineKeyboardButton(text="Cледующая привычка ▶️", callback_data=f"key={await write_state(not_completed)}")])
+                [InlineKeyboardButton(text="Вернуться потом ▶️", callback_data=f"key={await write_state(skip_button)}")])
 
         if post.is_bot_habit:
             post = await Post.objects.aget(pk=post.pk)
@@ -1267,8 +1277,8 @@ async def user_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text = f"{user}\n\n"
     reply_text += f"🏆 Ваш уровень: {await user.get_level()} {await user.get_level_progress()}"
     keyboard = [
-        [InlineKeyboardButton(text="🥇Мои Достижения", callback_data=MY_ACHIEVEMENTS)],
         [InlineKeyboardButton(text="🏆 Уровневые награды", callback_data=LEVEL_PRIZES)],
+        [InlineKeyboardButton(text="🥇Мои Достижения", callback_data=MY_ACHIEVEMENTS)],
         [InlineKeyboardButton(text=BACK_BUTTON_TEXT, callback_data=MAIN_MENU)]
     ]
 
@@ -1373,7 +1383,8 @@ CHANGE_SEX, CHANGE_AGE, CHANGE_UTC = range(10, 13)
 
 async def user_profile_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.delete_message()
+    if query:
+        await query.delete_message()
 
     user_photos: list[PhotoSize] = (await update.effective_user.get_profile_photos())["photos"][0]
     user_photo = user_photos[-1]
@@ -1417,6 +1428,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # run bot
 def run_bot():
+
     registration_handler = ConversationHandler(
         entry_points=[CommandHandler("sign_up", sign_up), CallbackQueryHandler(sign_up, SIGN_UP)],
         states={

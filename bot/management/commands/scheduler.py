@@ -1,8 +1,9 @@
 from aiofile import async_open
 from django.core.management import BaseCommand
-from telegram import Message
+from telegram import Update
 
 from dotenv import load_dotenv
+from telegram.ext import CallbackContext, ContextTypes, Application
 
 from .utils import write_state
 from ...models import *
@@ -20,19 +21,20 @@ bot = Bot(token=os.environ["BOT_TOKEN"])
 weekdays = [i[0] for i in WeekDay.choices]
 
 
-async def callback_delete_notification(message: Message, delay):
+async def callback_delete_notification(context: ContextTypes.DEFAULT_TYPE):
     try:
-        await asyncio.sleep(delay)
-        await message.edit_reply_markup(
-            InlineKeyboardMarkup([[InlineKeyboardButton(text="Не выполнено ❌", callback_data="prosrocheno")]]))
+        await bot.sendMessage(chat_id=context.job.chat_id, text="Какашка")
+        #await bot.edit_message_reply_markup(chat_id=context.job.chat_id, message_id=context.job.data["message_id"],
+                                 #           reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+                                         #       text="Не выполнено ❌", callback_data="prosrocheno")]]))
     except Exception as e:
         logging.info(e)
 
 
 async def send_notifications():
+    from .bot import get_post_list_by_schedule, application
     async for user in User.objects.all():
         try:
-            from .bot import get_post_list_by_schedule, application
             habits, daytime = await get_post_list_by_schedule(user, datetime.datetime.now().hour)
             reply_text = f"🍀 Доброго здоровья!\n\nТвои привычки на {daytime}:\n\n"
             if habits:
@@ -57,8 +59,8 @@ async def send_notifications():
                     [[InlineKeyboardButton(text="Приступить", callback_data=f"key={key}")]])
                 message = await bot.sendMessage(chat_id=user.external_id, text=reply_text,
                                                 reply_markup=reply_markup)
-                await callback_delete_notification(message, 24 * 60 * 60)
-
+                today = datetime.date.today() + datetime.timedelta(days=1)
+                # application.job_queue.run_once(user_id=user.external_id, callback=callback_delete_notification, chat_id=user.external_id, when=5, name=f"{message.id}-delete")
         except Exception as e:
             logging.warning(f"Error while sending notifications to {user}")
             logging.warning(e)
@@ -73,9 +75,6 @@ async def delete_states():
             states: dict = json.loads(data)
             for item in states.items():
                 key, state = item
-                print(key, state)
-                print(datetime.datetime.strptime(current_date, "%d%m%y") > datetime.datetime.strptime(state["date"],
-                                                                                                      "%d%m%y"))
         except Exception as e:
             logging.warning(e)
 
