@@ -1,4 +1,5 @@
 import functools
+from copy import deepcopy
 
 import django.db.models
 import telegram
@@ -31,7 +32,6 @@ from telegram.ext import (
     InlineQueryHandler,
     filters,
 )
-
 
 from telegram.error import BadRequest
 
@@ -957,8 +957,9 @@ async def callback_timer(context: ContextTypes.DEFAULT_TYPE):
                                                                   chat_id=context.job.chat_id)
             await asyncio.sleep(1)
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(text=f"Выполнил(а) ✅",
-                                                                   callback_data={await write_state(completed)})]] + keyboard[
-                                                                                                            1:])
+                                                                   callback_data={
+                                                                       await write_state(completed)})]] + keyboard[
+                                                                                                          1:])
         await current_message.edit_reply_markup(reply_markup)
     except Exception as e:
         logging.warning(e)
@@ -1013,7 +1014,7 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         extended["n"] = False
         extended["e"] = True
 
-        skip_button = data.copy()
+        skip_button = deepcopy(data)
         skip_button["hq"].append(skip_button["hq"][index])
         skip_button["hq"].pop(index)
         skip_button["c"] = False
@@ -1036,11 +1037,13 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             keyboard = [[InlineKeyboardButton(text=f"({post.lead_time} сек) Выполнил(а) ✅",
                                               callback_data=f"key={await write_state(completed)}")]]
-        keyboard.append([InlineKeyboardButton(text="Не выполнил(а)❌", callback_data=f"key={await write_state(not_completed)}")])
+        keyboard.append(
+            [InlineKeyboardButton(text="Не выполнил(а)❌", callback_data=f"key={await write_state(not_completed)}")])
 
         if index < len(data.items()) - 2:
             keyboard.append(
-                [InlineKeyboardButton(text="Вернуться потом ▶️", callback_data=f"key={await write_state(skip_button)}")])
+                [InlineKeyboardButton(text="Вернуться потом ▶️",
+                                      callback_data=f"key={await write_state(skip_button)}")])
 
         if post.is_bot_habit:
             post = await Post.objects.aget(pk=post.pk)
@@ -1051,7 +1054,8 @@ async def habit_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     cb_data = json.dumps({"field": button_data[0], "post_pk": post.pk})
                     keyboard.append([InlineKeyboardButton(text=button_data[1], callback_data=cb_data)])
             else:
-                keyboard.append([InlineKeyboardButton("💡 Подробности", callback_data=f"key={await write_state(extended)}")])
+                keyboard.append(
+                    [InlineKeyboardButton("💡 Подробности", callback_data=f"key={await write_state(extended)}")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -1420,7 +1424,6 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # run bot
 def run_bot():
-
     registration_handler = ConversationHandler(
         entry_points=[CommandHandler("sign_up", sign_up), CallbackQueryHandler(sign_up, SIGN_UP)],
         states={
@@ -1515,7 +1518,6 @@ def run_bot():
     # Photo Video
     application.add_handler(MessageHandler(filters.VIDEO, get_video_id))
     application.add_handler(MessageHandler(filters.PHOTO, get_photo_id))
-
 
     # scheduler
     from .scheduler import CustomScheduler

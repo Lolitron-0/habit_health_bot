@@ -96,6 +96,6 @@ class CustomScheduler(object):
 
     @staticmethod
     async def _every_minute(context: ContextTypes.DEFAULT_TYPE):
-        if datetime.datetime.now().minute == 0:
+        if datetime.datetime.now().minute == 00:
             await CustomScheduler._send_notifications()
         await CustomScheduler._handle_mailing()
