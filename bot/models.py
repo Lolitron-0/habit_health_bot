@@ -275,7 +275,7 @@ class BasePost(models.Model):
         ordering = ("-is_bot_habit",)
 
     def __str__(self):
-        return f"{self.pk}{self.title}"
+        return f"{self.title}"
 
     async def get_lead_minute(self):
         return self.lead_time // 60

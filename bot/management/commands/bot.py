@@ -94,15 +94,6 @@ async def update_or_create_user(chat: telegram.User, context: ContextTypes.DEFAU
         await UserSchedule.objects.acreate(user=user)
     return user, created
 
-
-async def is_user_subscribed(user_id, channel_username):
-    try:
-        member = await bot.get_chat_member(chat_id=channel_username, user_id=user_id)
-        return member.status in ['member', 'creator', 'administrator']
-    except BadRequest:
-        return False
-
-
 # start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user, created = await update_or_create_user(chat=update.effective_user)
@@ -135,19 +126,6 @@ async def share_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(text=(await user.get_referal_link(bot)), show_alert=True)
 
 
-async def check_requirements_by_user(user):
-    if await is_user_subscribed(user.external_id, "@BodnarVitaliy"):
-        user.is_subscribed = True
-    else:
-        user.is_subscribed = False
-    await user.asave()
-    cnt = 0
-    async for ref_user in user.refs.all():
-        if await is_user_subscribed(ref_user.external_id, "@BodnarVitaliy"):
-            cnt += 1
-    return user.is_subscribed, cnt
-
-
 async def check_requirements(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -157,7 +135,7 @@ async def check_requirements(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user.is_admin:
         reply_text += "Вы админ, кайфуйте"
     else:
-        is_subscribed, cnt = await check_requirements_by_user(user)
+        is_subscribed, cnt = await check_requirements_by_user(user, bot)
         smile_subscribed = "🌳" if is_subscribed else "🌱"
         reply_text += f"🙏🏻 Подписка на автора: {smile_subscribed}\n"
         smile_cnt = "🌳" if cnt >= 2 else "🌱"
@@ -363,6 +341,7 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await bot.sendMessage(chat_id=update.effective_user.id, text=answer, reply_markup=reply_markup)
 
 
+@requirements_required
 async def main_menu_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -853,7 +832,8 @@ async def delete_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     post = await BasePost.objects.aget(subs__in=[sub])
 
-    await query.delete_message()
+    if query:
+        await query.delete_message()
     await bot.sendMessage(chat_id=update.effective_user.id,
                           text=f"Привычка {post.title} успешно удалена",
                           reply_markup=reply_markup)
@@ -1261,12 +1241,16 @@ async def get_photo_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 MY_ACHIEVEMENTS, LEVEL_PRIZES = "MA", "LP"
 
 
+async def get_user_photo(update: Update):
+    user_photos = (await update.effective_user.get_profile_photos())["photos"]
+    if len(user_photos):
+        return user_photos[0][-1]
+
+
 async def user_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
 
-    user_photos: list[PhotoSize] = (await update.effective_user.get_profile_photos())["photos"][0]
-    user_photo = user_photos[-1]
+
 
     user = await User.objects.aget(pk=update.effective_user.id)
 
@@ -1278,9 +1262,17 @@ async def user_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(text=BACK_BUTTON_TEXT, callback_data=MAIN_MENU)]
     ]
 
-    await query.delete_message()
-    await bot.sendPhoto(chat_id=update.effective_user.id, photo=user_photo, caption=reply_text,
-                        reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    user_photo = await get_user_photo(update)
+
+    if query:
+        await query.delete_message()
+
+    if user_photo:
+        await bot.sendPhoto(chat_id=update.effective_user.id, photo=user_photo, caption=reply_text,
+                            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    else:
+        await bot.sendMessage(chat_id=update.effective_user.id, text=reply_text,
+                            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 
 async def user_tag_rewards(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1296,7 +1288,8 @@ async def user_tag_rewards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton(text=f"🌱 {reward.name}", callback_data=f"tag_reward={reward.pk}")])
     keyboard.append([InlineKeyboardButton(text=BACK_BUTTON_TEXT, callback_data=ACHIEVEMENTS)])
 
-    await query.delete_message()
+    if query:
+        await query.delete_message()
     await bot.sendMessage(chat_id=update.effective_user.id, text="Достижения:",
                           reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
@@ -1382,9 +1375,6 @@ async def user_profile_settings(update: Update, context: ContextTypes.DEFAULT_TY
     if query:
         await query.delete_message()
 
-    user_photos: list[PhotoSize] = (await update.effective_user.get_profile_photos())["photos"][0]
-    user_photo = user_photos[-1]
-
     user = await User.objects.aget(external_id=update.effective_user.id)
 
     keyboard = [
@@ -1394,9 +1384,16 @@ async def user_profile_settings(update: Update, context: ContextTypes.DEFAULT_TY
         [InlineKeyboardButton(text=BACK_BUTTON_TEXT, callback_data=MAIN_MENU)],
     ]
 
-    await bot.sendPhoto(chat_id=update.effective_user.id, photo=user_photo,
-                        caption=f"Настройка вашего профиля:\nПол: {user.get_sex_display()}\nВозраст: {user.age}\nЧасовой пояс: {user.get_utc()}",
-                        reply_markup=InlineKeyboardMarkup(keyboard))
+    user_photo = await get_user_photo(update)
+
+    if user_photo:
+        await bot.sendPhoto(chat_id=update.effective_user.id, photo=user_photo,
+                            caption=f"Настройка вашего профиля:\nПол: {user.get_sex_display()}\nВозраст: {user.age}\nЧасовой пояс: {user.get_utc()}",
+                            reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await bot.sendMessage(chat_id=update.effective_user.id,
+                              text=f"Настройка вашего профиля:\nПол: {user.get_sex_display()}\nВозраст: {user.age}\nЧасовой пояс: {user.get_utc()}",
+                              reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):

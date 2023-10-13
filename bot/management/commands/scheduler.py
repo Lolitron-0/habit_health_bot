@@ -30,7 +30,7 @@ class CustomScheduler(object):
     @staticmethod
     async def _send_notifications():
         from .bot import get_post_list_by_schedule
-        async for user in User.objects.all():
+        async for user in User.objects.filter(is_subscribed=True):
             try:
                 habits, daytime = await get_post_list_by_schedule(user, datetime.datetime.now().hour)
                 reply_text = f"🍀 Доброго здоровья!\n\nТвои привычки на {daytime}:\n\n"
